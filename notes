@@ -1,0 +1,4 @@
+Score Register = [49825]
+
+returns current score: pyboy.memory[49825]
+returns current health: pyboy.memory[49820]
