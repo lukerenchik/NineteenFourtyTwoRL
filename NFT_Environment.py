@@ -48,21 +48,30 @@ class NFT_Environment(gym.Env):
             done = 0
 
 
-        #Might be changing this
         self._calculate_fitness()
+
         reward = self._fitness-self._previous_fitness
 
         observation = self.pyboy.game_area()
+        
         info = {}
 
-        #truncated = False
+        truncated = False
 
-        return observation, reward, done, info
+        return observation, reward, done, truncated, info
 
     def _calculate_fitness(self):
         self._previous_fitness = self._fitness
 
-        #Find out how to calculate this using stable-baseline3
+        current_score = self.get_score()
+        current_health = self.get_lives()
+        ships_destroyed = self.get_enemies_destoryed()
+        current_dodges = self.get_dodges()
+        self._fitness = 0
+        #self._fitness += current_score
+        self._fitness += ships_destroyed * 10
+        self._fitness += current_health * 150
+        self._fitness += current_dodges * 1000
 
 
     def reset(self, **kwargs):
@@ -90,10 +99,17 @@ class NFT_Environment(gym.Env):
 
     def get_dodges(self):
         dodges = self.pyboy.memory[49822]
+        return dodges
 
+    def get_enemies_destoryed(self):
+        enemies_destroyed = self.pyboy.memory[49815]
+        return enemies_destroyed
+    
     def get_game_area(self):
         current_map = self.pyboy.game_area()
         return current_map
 
     def close(self):
         self.pyboy.stop()
+
+    
