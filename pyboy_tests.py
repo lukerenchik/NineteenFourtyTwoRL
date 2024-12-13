@@ -43,6 +43,16 @@ for _ in range(500):
     press_and_release_button("a")
 
 
+def print_memory():
+    for space in range(49810, 49831):
+        print("Address ", space, ":", pyboy.memory[space])
+
+def render_tick(num_ticks):
+    for tick in range (num_ticks):
+        pyboy.tick()
+
+
+
 pyboy.stop()
 
 
