@@ -7,12 +7,8 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 import random
 
+
 actions = ['', 'a', 'b', 'left', 'right', 'up', 'down', 'start', 'select']
-
-gbc_gamespace_shape = (32, 32)
-
-NFT_observation_space = spaces.Box(low=0, high=500, shape=gbc_gamespace_shape, dtype=np.uint16)
-
 
 
 class NFT_Environment(gym.Env):
@@ -25,11 +21,15 @@ class NFT_Environment(gym.Env):
             self.pyboy.set_emulation_speed(0)
 
         self.action_space = spaces.Discrete(len(actions))
-        self.observation_space = NFT_observation_space
+        self.observation_space = spaces.Box(low=0, high=255, shape=(1, 160, 144), dtype=np.uint8)
 
         self._fitness = 0
         self._previous_fitness = 0
         self.ticks_survived = 0
+        self.previous_observation = None
+        self.static_frame_count = 0
+        self.max_static_frames = 10
+
 
         # Set up a directory for saving samples
         self.sample_dir = "samples"
@@ -43,9 +43,25 @@ class NFT_Environment(gym.Env):
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
 
+        no_action_penalty = -1 if action == 0 else 0
+
         if action != 0:
             self.pyboy.button(actions[action])
         self.pyboy.tick(1)
+
+        observation = self._process_game_area()
+
+
+        if self.previous_observation is not None and np.array_equal(observation, self.previous_observation):
+            self.static_frame_count += 1
+        else:
+            self.static_frame_count = 0 
+
+        static_penalty = -0.5 * self.static_frame_count
+
+        self.previous_observation = observation 
+
+        
 
         # Check done condition
         if self.pyboy.memory[49820] == 255:
@@ -55,17 +71,19 @@ class NFT_Environment(gym.Env):
             done = False
             self.ticks_survived += 1
 
-        self._calculate_fitness()
-        reward = self._fitness - self._previous_fitness
 
-        observation = self.pyboy.game_area()
+        self._calculate_fitness()
+        
+        reward = self._fitness - self._previous_fitness + static_penalty
+
+        #print(f"Observation shape: {observation.shape}")
         info = {}
         truncated = False
 
         # Possibly save samples at random intervals, if we haven't reached the max_samples yet.
         # For example, with probability 1/100 or every 500 steps, etc.
-        if self.sample_count < self.max_samples and random.random() < 0.001:
-            self._save_sample(observation)
+        #if self.sample_count < self.max_samples and random.random() < 0.001:
+        #   self._save_sample(observation)
 
         return observation, reward, done, truncated, info
 
@@ -77,20 +95,20 @@ class NFT_Environment(gym.Env):
         current_dodges = self.get_dodges()
         self._fitness = 0
         self._fitness += ships_destroyed * 10
-        self._fitness += current_health * 150
-        self._fitness += current_dodges * 1000
-        self._fitness += 0.2 * self.ticks_survived
+        #self._fitness += current_health * 20
+        self._fitness += current_dodges * 10
+        #self._fitness += 0.01 * self.ticks_survived
 
     def reset(self, **kwargs):
         self.start_stage_one()
         self._fitness = 0
         self._previous_fitness = 0
-        observation = self.pyboy.game_area()
+        observation = self._process_game_area()
         info = {}
         return observation, info
 
     def start_stage_one(self):
-        with open("start_of_game.state", "rb") as f:
+        with open("GBC/start_of_game.state", "rb") as f:
             self.pyboy.load_state(f)
 
     def get_lives(self):
@@ -108,9 +126,6 @@ class NFT_Environment(gym.Env):
     def close(self):
         self.pyboy.stop()
 
-    from PIL import Image, ImageDraw, ImageFont
-    import numpy as np
-    import os
 
     def _save_sample(self, observation):
         # observation is the game_area (e.g. 32x32)
@@ -168,3 +183,12 @@ class NFT_Environment(gym.Env):
         base_image.save(image_path)
 
         self.sample_count += 1
+
+
+    def _process_game_area(self):
+        screenshot = self.pyboy.screen.image
+        grayscale = screenshot.convert("L")
+        resized = grayscale.resize((144,160), Image.Resampling.BILINEAR)
+        observation = np.array(resized, dtype=np.uint8)
+        observation = np.expand_dims(observation, axis=0)
+        return observation

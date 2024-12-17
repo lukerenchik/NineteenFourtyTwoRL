@@ -1,34 +1,36 @@
 from stable_baselines3 import PPO
+from stable_baselines3.common.env_util import make_vec_env
 from NFT_Environment import NFT_Environment
 from pyboy import PyBoy
-
-pyboy = PyBoy("nineteenFT.gbc")
-
-
-nft_env = NFT_Environment(pyboy)
+import atexit
 
 
+def create_env():
+    pyboy = PyBoy("GBC/nineteenFT.gbc", window='null')
+    #pyboy = PyBoy("GBC/nineteenFT.gbc")
+    return NFT_Environment(pyboy)
 
-model = PPO("MlpPolicy", nft_env, verbose=1)
-model.learn(total_timesteps=100000)
+n_env = 8
+env = make_vec_env(create_env, n_envs=n_env)
 
-vec_env = model.get_env()
-obs = vec_env.reset()
-for i in range(1000):
-    action, _states = model.predict(obs)
-    obs, reward, done, info = vec_env.step(action)
-    vec_env.render()
- 
+model_path = "ppo_nft_agent.zip"
 
-for i in range(100000):
-    action, _states = model.predict(obs)
-    obs, reward, done, info = vec_env.step(action)
+try:
+    model = PPO.load(model_path, env=env)
+    print("Loaded Existing Model.")
+except FileNotFoundError:
+    print("No saved model found. Creating a new model.")
+    model = PPO("CnnPolicy", env, verbose=1)
 
+def save_model():
+    print("Saving model...")
+    model.save(model_path)
+    print("Model saved successfully")
 
-for i in range(10000):
-    action, _states = model.predict(obs)
-    obs, reward, done, info = vec_env.step(action)
-    #vec_env.render()
-    model.save("first_NFT")
+atexit.register(save_model)
 
-nft_env.close()
+try:
+    print("Starting Training...")
+    model.learn(total_timesteps=1000000)
+except KeyboardInterrupt:
+    print("Training Interrupted Manually")
