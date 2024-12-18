@@ -6,11 +6,11 @@ import atexit
 
 
 def create_env():
-    pyboy = PyBoy("GBC/nineteenFT.gbc", window='null')
-    #pyboy = PyBoy("GBC/nineteenFT.gbc")
+    #pyboy = PyBoy("GBC/nineteenFT.gbc", window='null')
+    pyboy = PyBoy("GBC/nineteenFT.gbc")
     return NFT_Environment(pyboy)
 
-n_env = 8
+n_env = 1
 env = make_vec_env(create_env, n_envs=n_env)
 
 model_path = "ppo_nft_agent.zip"
@@ -31,6 +31,6 @@ atexit.register(save_model)
 
 try:
     print("Starting Training...")
-    model.learn(total_timesteps=1000000)
+    model.learn(total_timesteps=50000)
 except KeyboardInterrupt:
     print("Training Interrupted Manually")

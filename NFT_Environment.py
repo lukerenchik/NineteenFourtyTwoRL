@@ -6,6 +6,7 @@ from pyboy import PyBoy
 from PIL import Image, ImageDraw, ImageFont
 import os
 import random
+from collections import deque
 
 
 actions = ['', 'a', 'b', 'left', 'right', 'up', 'down', 'start', 'select']
@@ -28,40 +29,38 @@ class NFT_Environment(gym.Env):
         self.ticks_survived = 0
         self.previous_observation = None
         self.static_frame_count = 0
-        self.max_static_frames = 10
-
+        self.frame_history = deque(maxlen=50)
+        self.static_frame_penalty = 0
 
         # Set up a directory for saving samples
-        self.sample_dir = "samples"
-        os.makedirs(self.sample_dir, exist_ok=True)
-
-        self.sample_count = 0  # How many samples have been saved
-        self.max_samples = 50  # Max samples to save
+        #self.sample_dir = "samples"
+        #os.makedirs(self.sample_dir, exist_ok=True)
+        #self.sample_count = 0  # How many samples have been saved
+        #self.max_samples = 50  # Max samples to save
 
         self.start_stage_one()
 
     def step(self, action):
-        assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
+        assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
 
-        no_action_penalty = -1 if action == 0 else 0
-
+        # Execute the action
         if action != 0:
             self.pyboy.button(actions[action])
         self.pyboy.tick(1)
 
+        # Process the current frame
         observation = self._process_game_area()
+        #self.frame_history.append(observation)
 
+        # Compare current frame to 10 frames ago
+        #if len(self.frame_history) == 50:
+        #    if np.array_equal(observation, self.frame_history[0]):
+        #        self.static_frame_penalty = self.static_frame_penalty + 1  # Cap at 10
+        #    else:
+        #        self.static_frame_penalty = 0  # Reset penalty if screen changes
 
-        if self.previous_observation is not None and np.array_equal(observation, self.previous_observation):
-            self.static_frame_count += 1
-        else:
-            self.static_frame_count = 0 
-
-        static_penalty = -0.5 * self.static_frame_count
-
-        self.previous_observation = observation 
-
-        
+        # Static penalty applied
+        #static_penalty = -1 * self.static_frame_penalty
 
         # Check done condition
         if self.pyboy.memory[49820] == 255:
@@ -71,21 +70,17 @@ class NFT_Environment(gym.Env):
             done = False
             self.ticks_survived += 1
 
-
+        # Fitness and rewards
         self._calculate_fitness()
-        
-        reward = self._fitness - self._previous_fitness + static_penalty
+        reward = self._fitness - self._previous_fitness 
 
-        #print(f"Observation shape: {observation.shape}")
+        print(f"Reward: {reward}, Static Penalty: {0}, ")
+
         info = {}
         truncated = False
 
-        # Possibly save samples at random intervals, if we haven't reached the max_samples yet.
-        # For example, with probability 1/100 or every 500 steps, etc.
-        #if self.sample_count < self.max_samples and random.random() < 0.001:
-        #   self._save_sample(observation)
-
         return observation, reward, done, truncated, info
+
 
     def _calculate_fitness(self):
         self._previous_fitness = self._fitness
@@ -93,11 +88,12 @@ class NFT_Environment(gym.Env):
         current_health = self.get_lives()
         ships_destroyed = self.get_enemies_destoryed()
         current_dodges = self.get_dodges()
-        self._fitness = 0
-        self._fitness += ships_destroyed * 10
-        #self._fitness += current_health * 20
-        self._fitness += current_dodges * 10
-        #self._fitness += 0.01 * self.ticks_survived
+
+
+        self._fitness += ships_destroyed * 100
+        self._fitness += current_health * 20
+        self._fitness += current_dodges * 5
+        self._fitness -= 0.01 * self.ticks_survived
 
     def reset(self, **kwargs):
         self.start_stage_one()
